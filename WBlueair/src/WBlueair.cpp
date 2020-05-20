@@ -13,6 +13,7 @@ void setup() {
   Serial.begin(9600);
 	network = new WNetwork(DEBUG, APPLICATION, VERSION, true, NO_LED);
 	baDevice = new WPurifierDevice(network);
+
   network->addDevice(baDevice);
   network->addDevice(baDevice->getClock());
   network->addDevice(baDevice->getTemperatureSensor());
