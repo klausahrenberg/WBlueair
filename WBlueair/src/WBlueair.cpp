@@ -3,7 +3,7 @@
 #include "WPurifierDevice.h"
 
 #define APPLICATION "Air Purifier"
-#define VERSION "1.10"
+#define VERSION "1.11"
 #define DEBUG false
 
 WNetwork* network;

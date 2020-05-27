@@ -36,13 +36,15 @@ struct WSLed {
 
 class WStatusLeds: public WPin {
 public:
-	WStatusLeds(WNetwork* network, WMCP23017Expander* expander, WProperty* aqi, WProperty* outsideAqi, bool insideOutsideAqiStatus, WProperty* fanMode, WProperty* mode, WProperty* co2, WProperty* tvoc) :
+	WStatusLeds(WNetwork* network, WMCP23017Expander* expander, WProperty* aqi, WProperty* outsideAqi, bool insideOutsideAqiStatus,
+		          WProperty* onOffProperty, WProperty* fanMode, WProperty* mode, WProperty* co2, WProperty* tvoc) :
 			WPin(DATA_PIN, OUTPUT) {
 		this->network = network;
 		this->expander = expander;
 		this->aqi = aqi;
 		this->outsideAqi = outsideAqi;
 		this->insideOutsideAqiStatus = insideOutsideAqiStatus;
+		this->onOffProperty = onOffProperty;
 		this->fanMode = fanMode;
 		this->mode = mode;
 		this->co2 = co2;
@@ -88,7 +90,11 @@ public:
 		}
 
 		updateLedStates();
-
+		//Bar LEDs
+		expander->digitalWrite(PIN_LED_LOW, ((barLeds[0].on && ((!barLeds[0].blinking) || (blinkOn))) ? LOW : HIGH));
+		expander->digitalWrite(PIN_LED_MEDIUM, ((barLeds[1].on && ((!barLeds[1].blinking) || (blinkOn))) ? LOW : HIGH));
+		expander->digitalWrite(PIN_LED_HIGH, ((barLeds[2].on && ((!barLeds[2].blinking) || (blinkOn))) ? LOW : HIGH));
+		//RGB LEDs
 		if ((lastBlinkOn == 0) || (now - lastBlinkOn > BLINK_DURATION)) {
 			blinkOn = !blinkOn;
 			lastBlinkOn = now;
@@ -110,12 +116,14 @@ public:
 private:
 	CRGB fastLeds[NUM_LEDS];
 	WSLed leds[NUM_LEDS];
+	WSLed barLeds[3];
 	bool touchPanelOn;
 	byte brightness;
 	WNetwork* network;
 	WMCP23017Expander* expander;
 	WProperty* aqi;
 	WProperty* outsideAqi;
+	WProperty* onOffProperty;
 	WProperty* fanMode;
   WProperty* mode;
 	WProperty* co2;
@@ -126,7 +134,7 @@ private:
 
 	void updateLedStates() {
 		CRGB pmStatusColor = getPmStatusColor();
-		if (this->touchPanelOn) {
+		if (this->touchPanelOn == touchPanelOn) {
     	//WIFI LED
     	if (network->isWifiConnected()) {
       	if ((network->isSupportingMqtt()) && (!network->isMqttConnected())) {
@@ -150,6 +158,7 @@ private:
     	} else {
 				leds[LED_AUTO].color = DEFAULT_COLOR;
     	}
+			leds[LED_AUTO].blinking = (onOffProperty && !onOffProperty->getBoolean());
 			leds[LED_AUTO].on = true;
     	//Filter
 			leds[LED_FILTER].color = DEFAULT_COLOR;
@@ -195,10 +204,12 @@ private:
 		}
 		//Fan Bar LEDs
 		bool b = (this->touchPanelOn) && (!this->fanMode->equalsString(FAN_MODE_OFF));
-		expander->digitalWrite(PIN_LED_LOW, (b ? LOW : HIGH));
-		expander->digitalWrite(PIN_LED_MEDIUM, (b && ((this->fanMode->equalsString(FAN_MODE_MEDIUM)) || (this->fanMode->equalsString(FAN_MODE_HIGH))) ? LOW : HIGH));
-		expander->digitalWrite(PIN_LED_HIGH, (b && (this->fanMode->equalsString(FAN_MODE_HIGH)) ? LOW : HIGH));
-
+		barLeds[0].on = b;
+		barLeds[0].blinking = (onOffProperty && !onOffProperty->getBoolean());
+		barLeds[1].on = (b && ((this->fanMode->equalsString(FAN_MODE_MEDIUM)) || (this->fanMode->equalsString(FAN_MODE_HIGH))));
+		barLeds[1].blinking = barLeds[0].blinking;
+		barLeds[2].on = (b && (this->fanMode->equalsString(FAN_MODE_HIGH)));
+		barLeds[2].blinking = barLeds[0].blinking;
   }
 
 	CRGB getPmStatusColor() {

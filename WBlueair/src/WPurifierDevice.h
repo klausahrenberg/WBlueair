@@ -56,14 +56,19 @@ public:
     this->addProperty(this->iaqCore->co2Value);
     this->addProperty(this->iaqCore->tvoc);
     this->addProperty(this->iaqCore->tvocValue);
+    //onOffProperty
+    this->onOffProperty = WProperty::createOnOffProperty("on", "Switch");
+    this->onOffProperty->setBoolean(true);
+    this->onOffProperty->setOnChange(std::bind(&WPurifierDevice::onOnOffPropertyChanged, this, std::placeholders::_1));
+    this->addProperty(this->onOffProperty);
     //fan mode
     this->fanMode = new WProperty("fanMode", "Fan", STRING, TYPE_FAN_MODE_PROPERTY);
     this->fanMode->addEnumString(FAN_MODE_OFF);
     this->fanMode->addEnumString(FAN_MODE_LOW);
     this->fanMode->addEnumString(FAN_MODE_MEDIUM);
     this->fanMode->addEnumString(FAN_MODE_HIGH);
-    this->fanMode->setOnChange(std::bind(&WPurifierDevice::onFanModeChanged, this, std::placeholders::_1));
     this->fanMode->setString(FAN_MODE_OFF);
+    this->fanMode->setOnChange(std::bind(&WPurifierDevice::onFanModeChanged, this, std::placeholders::_1));
     this->addProperty(this->fanMode);
     //mode
     this->mode = new WProperty("mode", "Mode", STRING, TYPE_THERMOSTAT_MODE_PROPERTY);
@@ -75,7 +80,8 @@ public:
     this->addProperty(this->mode);
     //Initialize LEDs
     //StatusLEDs
-    this->leds = new WStatusLeds(network, this->expander, this->pms->aqi, this->outsideAqiDevice->getAqi(), this->insideOutsideAqiStatus->getBoolean(), this->fanMode, this->mode,
+    this->leds = new WStatusLeds(network, this->expander, this->pms->aqi, this->outsideAqiDevice->getAqi(), this->insideOutsideAqiStatus->getBoolean(),
+                                 this->onOffProperty, this->fanMode, this->mode,
                                  this->iaqCore->co2, this->iaqCore->tvoc);
     this->addPin(this->leds);
     this->addProperty(this->leds->statusLedOn);
@@ -130,14 +136,21 @@ public:
 
 protected:
 
+  void onOnOffPropertyChanged(WProperty* property) {
+    this->setFromAutoMode = true;
+    onFanModeChanged(this->fanMode);
+    this->setFromAutoMode = false;
+  }
+
   void onFanModeChanged(WProperty* property) {
     if ((this->mode) && (!this->setFromAutoMode)) {
       this->mode->setString(MODE_MANUAL);
     }
-    expander->digitalWrite(PIN_Z, (!this->fanMode->equalsString(FAN_MODE_OFF)));
-    expander->digitalWrite(PIN_LOW, (this->fanMode->equalsString(FAN_MODE_LOW)) || (this->fanMode->equalsString(FAN_MODE_MEDIUM)));
-    expander->digitalWrite(PIN_MEDIUM, this->fanMode->equalsString(FAN_MODE_MEDIUM));
-    expander->digitalWrite(PIN_HIGH, this->fanMode->equalsString(FAN_MODE_HIGH));
+    bool devOn = ((this->onOffProperty) && (this->onOffProperty->getBoolean()));
+    expander->digitalWrite(PIN_Z, ((devOn) && (!this->fanMode->equalsString(FAN_MODE_OFF))));
+    expander->digitalWrite(PIN_LOW, ((devOn) && ((this->fanMode->equalsString(FAN_MODE_LOW)) || (this->fanMode->equalsString(FAN_MODE_MEDIUM)))));
+    expander->digitalWrite(PIN_MEDIUM, ((devOn) && this->fanMode->equalsString(FAN_MODE_MEDIUM)));
+    expander->digitalWrite(PIN_HIGH, ((devOn) && this->fanMode->equalsString(FAN_MODE_HIGH)));
   }
 
   void onSwitchPressed(byte switchNo, bool pressed) {
@@ -147,6 +160,9 @@ protected:
         //updateLeds();
         break;
       case PIN_SWITCH_FAN:
+        if (this->onOffProperty) {
+          this->onOffProperty->setBoolean(true);
+        }
         if (fanMode->equalsString(FAN_MODE_OFF)) {
           this->fanMode->setString(FAN_MODE_LOW);
         } else if (fanMode->equalsString(FAN_MODE_LOW)) {
@@ -158,6 +174,9 @@ protected:
         }
         break;
       case PIN_SWITCH_AUTO:
+        if (this->onOffProperty) {
+          this->onOffProperty->setBoolean(true);
+        }
         if (this->mode->equalsString(MODE_AUTO)) {
           this->mode->setString(MODE_MANUAL);
         } else {
@@ -178,6 +197,7 @@ private:
   WIaqCore* iaqCore;
   WClock* clock;
   WTemperatureSensor* temperatureSensor;
+  WProperty* onOffProperty;
   WProperty* fanMode;
   WProperty* mode;
   WProperty* insideOutsideAqiStatus;
