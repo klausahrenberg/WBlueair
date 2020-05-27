@@ -37,6 +37,11 @@ public:
     this->apiToken->setReadOnly(true);
 		this->apiToken->setVisibility(NONE);
     this->addProperty(this->apiToken);
+    //HtmlPages
+    WPage* configPage = new WPage(this->getId(), "Configure Outside Air Quality");
+    configPage->setPrintPage(std::bind(&WOutsideAqiDevice::printConfigPage, this, std::placeholders::_1, std::placeholders::_2));
+    configPage->setSubmittedPage(std::bind(&WOutsideAqiDevice::saveConfigPage, this, std::placeholders::_1, std::placeholders::_2));
+    network->addCustomPage(configPage);
     //Properties
     this->aqi = new WLevelIntProperty("aqi", "AQI", 0, 200);
     this->aqi->setReadOnly(true);
@@ -82,11 +87,7 @@ public:
     }
   }
 
-  virtual bool isProvidingConfigPage() {
-    return true;
-  }
-
-  void printConfigPage(WStringStream* page) {
+  void printConfigPage(ESP8266WebServer* webServer, WStringStream* page) {
     page->printAndReplace(FPSTR(HTTP_CONFIG_PAGE_BEGIN), getId());
     page->printAndReplace(FPSTR(HTTP_CHECKBOX_OPTION), "sa", "sa", (showAsWebthingDevice->getBoolean() ? HTTP_CHECKED : ""), "", "Show as Mozilla Webthing device");
     page->printAndReplace(FPSTR(HTTP_TEXT_FIELD), "Station Index:", "si", "8", stationIndex->c_str());
@@ -94,7 +95,7 @@ public:
     page->print(FPSTR(HTTP_CONFIG_SAVE_BUTTON));
 	}
 
-	void saveConfigPage(ESP8266WebServer* webServer) {
+	void saveConfigPage(ESP8266WebServer* webServer, WStringStream* page) {
 		network->notice(F("Save config page"));
 		this->showAsWebthingDevice->setBoolean(webServer->arg("sa") == HTTP_TRUE);
     this->stationIndex->setString(webServer->arg("si").c_str());
