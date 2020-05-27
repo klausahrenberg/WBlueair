@@ -134,7 +134,7 @@ private:
 
 	void updateLedStates() {
 		CRGB pmStatusColor = getPmStatusColor();
-		if (this->touchPanelOn == touchPanelOn) {
+		if (this->touchPanelOn == true) {
     	//WIFI LED
     	if (network->isWifiConnected()) {
       	if ((network->isSupportingMqtt()) && (!network->isMqttConnected())) {
