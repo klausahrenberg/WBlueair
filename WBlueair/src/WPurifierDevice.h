@@ -30,8 +30,18 @@ public:
     this->insideOutsideAqiStatus->setReadOnly(true);
 		this->insideOutsideAqiStatus->setVisibility(NONE);
     this->addProperty(insideOutsideAqiStatus);
+    //switchStatusLedOffAtNight
+    this->switchStatusLedOffAtNight = network->getSettings()->setBoolean("switchStatusLedOffAtNight", true);
+    this->switchStatusLedOffAtNight->setReadOnly(true);
+		this->switchStatusLedOffAtNight->setVisibility(NONE);
+    this->addProperty(switchStatusLedOffAtNight);
     //clock
-    this->clock = new WClock(network);
+    this->clock = new WClock(network, true);
+    if (this->switchStatusLedOffAtNight->getBoolean()) {
+      this->clock->nightMode->setOnChange([this](WProperty *prop){
+        this->leds->statusLedOn->setBoolean(!prop->getBoolean());
+      });
+    }
     //IAQ Core
     this->iaqCore = new WIaqCore(this->network);
     this->addPin(this->iaqCore);
@@ -126,12 +136,14 @@ public:
   void printConfigPage(ESP8266WebServer* webServer, WStringStream* page) {
     page->printAndReplace(FPSTR(HTTP_CONFIG_PAGE_BEGIN), getId());
     page->printAndReplace(FPSTR(HTTP_CHECKBOX_OPTION), "sa", "sa", (insideOutsideAqiStatus->getBoolean() ? HTTP_CHECKED : ""), "", "Show inside and outside AQI at status LED");
+    page->printAndReplace(FPSTR(HTTP_CHECKBOX_OPTION), "ss", "ss", (switchStatusLedOffAtNight->getBoolean() ? HTTP_CHECKED : ""), "", "Switch status LED off during night");
     page->print(FPSTR(HTTP_CONFIG_SAVE_BUTTON));
 	}
 
 	void saveConfigPage(ESP8266WebServer* webServer, WStringStream* page) {
 		network->notice(F("Save config page"));
 		this->insideOutsideAqiStatus->setBoolean(webServer->arg("sa") == HTTP_TRUE);
+    this->switchStatusLedOffAtNight->setBoolean(webServer->arg("ss") == HTTP_TRUE);
 	}
 
 protected:
@@ -201,6 +213,7 @@ private:
   WProperty* fanMode;
   WProperty* mode;
   WProperty* insideOutsideAqiStatus;
+  WProperty* switchStatusLedOffAtNight;
   bool setFromAutoMode;
 };
 
