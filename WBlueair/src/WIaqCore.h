@@ -1,8 +1,12 @@
 #include "Arduino.h"
+#ifdef ESP8266
 #include <ESP8266WiFi.h>
+#elif ESP32
+#include <WiFi.h>
+#endif
 #include "Wire.h"
-#include "iAQcore.h"
 
+#define IAQ_ADDR	0x5A
 #define AVERAGE_COUNTS 2
 
 const char* LEVEL_EXCELLENT = "Excellent";
@@ -42,26 +46,19 @@ public:
     this->tvoc->addEnumString(LEVEL_MODERATE);
     this->tvoc->addEnumString(LEVEL_POOR);
     this->tvoc->addEnumString(LEVEL_UNHEALTHY);
-    // Enable iAQ-Core
-    iaq = new iAQcore();
-    Wire.begin(D2, D1);
-    Wire.setClockStretchLimit(1000);
-    initialized = iaq->begin();
-    if (!initialized) {
-      this->network->error(F("Could not access iAQ-Core chip."));
-    }
   }
 
   void loop(unsigned long now) {
     if ((initialized) && (((measuring) && (now - lastMeasure > 1000)) || (lastMeasure == 0)
 				|| (now - lastMeasure > measureInterval))) {
 			lastMeasure = now;
-      uint16_t eco2;
-      uint16_t stat;
-      uint32_t resist;
-      uint16_t etvoc;
-      iaq->read(&eco2, &stat, &resist, &etvoc);
+
+      readRegisters();
+      uint16_t eco2 = getPrediction();
+      uint16_t etvoc = getTVOC();
+
 			if ((eco2 > 0) && (etvoc > 0)) {
+        network->debug(F("IAQ measure sample %d: CO2 %d, TVOC %d"), measureCounts, eco2, etvoc);
 				measureValueCo2 = measureValueCo2 + eco2;
 				measureValueTvoc = measureValueTvoc + etvoc;
 				measureCounts++;
@@ -84,12 +81,13 @@ public:
   WProperty* tvoc;
 private:
   WNetwork* network;
-  iAQcore* iaq;
+  //iAQcore* iaq;
   unsigned long lastMeasure, measureInterval;
 	bool measuring, initialized;
 	int measureCounts;
 	double measureValueCo2;
 	double measureValueTvoc;
+  uint8_t data[9];
 
   void updateCo2AndTvocRating() {
     if (!co2Value->isNull()) {
@@ -134,4 +132,52 @@ private:
       tvoc->setString("");
     }
   }
+
+  void readRegisters() {
+  	int i = 0;
+  	Wire.requestFrom(IAQ_ADDR, 9);
+  	while (Wire.available()) {
+  		data[i] = Wire.read();
+  		i++;
+  	}
+  }
+
+  /* Calculate CO2 prediction*/
+  uint16_t getPrediction() {
+  	return (uint16_t)((data[0] << 8) + data[1]);
+  }
+
+  /* Calculate sensor resistance in ohms*/
+  int32_t getResistance() {
+  	return (int32_t)(data[3] << 24) + (int32_t)(data[4] << 16) + (int32_t)(data[5] << 8) + (int32_t)data[6];
+  }
+
+  /* Calculate TVOC prediction*/
+  uint16_t getTVOC() {
+  	return (uint16_t)(data[7] << 8) + (uint16_t)(data[8]);
+  }
+
+  /* Get status of data
+  OK - data is valid
+  RUNIN - warm-up phase
+  BUSY - data integrity >8 bits not guaranteed
+  ERROR - sensor possibly defective
+  UNRECOGNIZED DATA - physical connection error*/
+  char* getStatus() {
+  	if (data[2] == 0x00)
+  		return "OK";
+  	else if (data[2] == 0x10)
+  		return "RUNIN";
+  	else if (data[2] == 0x01)
+  		return "BUSY";
+  	else if (data[2] == 0x80)
+  		return "ERROR";
+  	else
+  		return "UNRECOGNIZED DATA";
+  }
+
+  uint8_t getStatusByte() {
+  	return data[2];
+  }
+
 };

@@ -2,19 +2,25 @@
 #define	PURIFIER_DEVICE_MCU_H
 
 #include "Arduino.h"
-#include <ESP8266WiFi.h>
 #include <EEPROM.h>
+#include "Wire.h"
 #include "WOutsideAqiDevice.h"
+#include "WIOExpander.h"
 #include "WStatusLeds.h"
 #include "WPms7003.h"
 #include "WIaqCore.h"
 #include "WClock.h"
 #include "WTemperatureSensor.h"
 
-#define PIN_PMS_SLEEP 14 //D5
+
+#ifdef ESP8266
+#define PIN_PMS_SLEEP D5
+#elif ESP32
+#define PIN_PMS_SLEEP 33
+#endif
 #define AQI_LIMIT_LOW 10
 #define AQI_LIMIT_MEDIUM 30
-#define AQI_LIMIT_HIGH 60
+#define AQI_LIMIT_HIGH 50
 
 class WPurifierDevice: public WDevice {
 public:
@@ -22,9 +28,7 @@ public:
 
   WPurifierDevice(WNetwork* network)
   	: WDevice(network, "airpurifier", "Air Purifier", DEVICE_TYPE_MULTI_LEVEL_SWITCH) {
-    this->setFromAutoMode = false;
     //outside AQI device
-    //network->setOnNotify(std::bind(&WPurifierDevice::updateLeds, this));
     this->outsideAqiDevice = new WOutsideAqiDevice(network);
     this->insideOutsideAqiStatus = network->getSettings()->setBoolean("insideOutsideAqiStatus", true);
     this->insideOutsideAqiStatus->setReadOnly(true);
@@ -43,6 +47,8 @@ public:
       });
     }
     //IAQ Core
+    Wire.begin();
+
     this->iaqCore = new WIaqCore(this->network);
     this->addPin(this->iaqCore);
     //temperatureSensor
@@ -52,7 +58,7 @@ public:
     this->addPin(this->pms);
 
     //IO expander
-    this->expander = new WMCP23017Expander(0x20);
+    this->expander = new WIOExpander(0x20);
     this->expander->setOnNotify(std::bind(&WPurifierDevice::onSwitchPressed, this, std::placeholders::_1, std::placeholders::_2));
     this->addPin(this->expander);
     //AQIs
@@ -69,7 +75,7 @@ public:
     //onOffProperty
     this->onOffProperty = WProperty::createOnOffProperty("on", "Switch");
     this->onOffProperty->setBoolean(true);
-    this->onOffProperty->setOnChange(std::bind(&WPurifierDevice::onOnOffPropertyChanged, this, std::placeholders::_1));
+    this->onOffProperty->setOnChange(std::bind(&WPurifierDevice::onFanModeChanged, this, std::placeholders::_1));
     this->addProperty(this->onOffProperty);
     //fan mode
     this->fanMode = new WProperty("fanMode", "Fan", STRING, TYPE_FAN_MODE_PROPERTY);
@@ -95,6 +101,7 @@ public:
                                  this->iaqCore->co2, this->iaqCore->tvoc);
     this->addPin(this->leds);
     this->addProperty(this->leds->statusLedOn);
+
     //HtmlPages
     WPage* configPage = new WPage(this->getId(), "Configure air purifier");
     configPage->setPrintPage(std::bind(&WPurifierDevice::printConfigPage, this, std::placeholders::_1, std::placeholders::_2));
@@ -106,7 +113,6 @@ public:
   void loop(unsigned long now) {
     if ((this->mode->equalsString(MODE_AUTO)) && (!this->pms->aqi->isNull())) {
       int aqi = this->pms->aqi->getInteger();
-      this->setFromAutoMode = true;
       if (aqi < AQI_LIMIT_LOW) {
         this->fanMode->setString(FAN_MODE_OFF);
       } else if ((aqi >= AQI_LIMIT_LOW) && (aqi < AQI_LIMIT_MEDIUM)) {
@@ -116,7 +122,6 @@ public:
       } else if (aqi > AQI_LIMIT_HIGH) {
         this->fanMode->setString(FAN_MODE_HIGH);
       }
-      this->setFromAutoMode = false;
     }
     WDevice::loop(now);
   }
@@ -133,31 +138,22 @@ public:
     return this->temperatureSensor;
   }
 
-  void printConfigPage(ESP8266WebServer* webServer, WStringStream* page) {
-    page->printAndReplace(FPSTR(HTTP_CONFIG_PAGE_BEGIN), getId());
-    page->printAndReplace(FPSTR(HTTP_CHECKBOX_OPTION), "sa", "sa", (insideOutsideAqiStatus->getBoolean() ? HTTP_CHECKED : ""), "", "Show inside and outside AQI at status LED");
-    page->printAndReplace(FPSTR(HTTP_CHECKBOX_OPTION), "ss", "ss", (switchStatusLedOffAtNight->getBoolean() ? HTTP_CHECKED : ""), "", "Switch status LED off during night");
+  void printConfigPage(AsyncWebServerRequest* request, Print* page) {
+    page->printf(HTTP_CONFIG_PAGE_BEGIN, getId());
+    page->printf(HTTP_CHECKBOX_OPTION, "sa", "sa", (insideOutsideAqiStatus->getBoolean() ? HTTP_CHECKED : ""), "", "Show inside and outside AQI at status LED");
+    page->printf(HTTP_CHECKBOX_OPTION, "ss", "ss", (switchStatusLedOffAtNight->getBoolean() ? HTTP_CHECKED : ""), "", "Switch status LED off during night");
     page->print(FPSTR(HTTP_CONFIG_SAVE_BUTTON));
 	}
 
-	void saveConfigPage(ESP8266WebServer* webServer, WStringStream* page) {
+	void saveConfigPage(AsyncWebServerRequest* request, Print* page) {
 		network->notice(F("Save config page"));
-		this->insideOutsideAqiStatus->setBoolean(webServer->arg("sa") == HTTP_TRUE);
-    this->switchStatusLedOffAtNight->setBoolean(webServer->arg("ss") == HTTP_TRUE);
+		this->insideOutsideAqiStatus->setBoolean(request->arg("sa") == HTTP_TRUE);
+    this->switchStatusLedOffAtNight->setBoolean(request->arg("ss") == HTTP_TRUE);
 	}
 
 protected:
 
-  void onOnOffPropertyChanged(WProperty* property) {
-    this->setFromAutoMode = true;
-    onFanModeChanged(this->fanMode);
-    this->setFromAutoMode = false;
-  }
-
   void onFanModeChanged(WProperty* property) {
-    if ((this->mode) && (!this->setFromAutoMode)) {
-      this->mode->setString(MODE_MANUAL);
-    }
     bool devOn = ((this->onOffProperty) && (this->onOffProperty->getBoolean()));
     expander->digitalWrite(PIN_Z, ((devOn) && (!this->fanMode->equalsString(FAN_MODE_OFF))));
     expander->digitalWrite(PIN_LOW, ((devOn) && ((this->fanMode->equalsString(FAN_MODE_LOW)) || (this->fanMode->equalsString(FAN_MODE_MEDIUM)))));
@@ -174,6 +170,9 @@ protected:
       case PIN_SWITCH_FAN:
         if (this->onOffProperty) {
           this->onOffProperty->setBoolean(true);
+        }
+        if (this->mode) {
+          this->mode->setString(MODE_MANUAL);
         }
         if (fanMode->equalsString(FAN_MODE_OFF)) {
           this->fanMode->setString(FAN_MODE_LOW);
@@ -204,7 +203,7 @@ protected:
 private:
   WOutsideAqiDevice* outsideAqiDevice;
   WStatusLeds* leds;
-  WMCP23017Expander* expander;
+  WIOExpander* expander;
   WPms7003* pms;
   WIaqCore* iaqCore;
   WClock* clock;
@@ -214,7 +213,6 @@ private:
   WProperty* mode;
   WProperty* insideOutsideAqiStatus;
   WProperty* switchStatusLedOffAtNight;
-  bool setFromAutoMode;
 };
 
 #endif

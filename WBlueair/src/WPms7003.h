@@ -50,14 +50,16 @@ public:
   }
 
   void loop(unsigned long now) {
-		pms7003->updateFrame();
 		if ((!measuring) && ((lastMeasure == 0) || (now - lastMeasure > measureInterval))) {
-			//network->notice(F("Start measuring..."));
+			network->notice(F("Start measuring..."));
     	lastMeasure = now;
 			digitalWrite(this->getPin(), HIGH);
 			pms7003->requestRead();
 			lastSign = now;
 			measuring = true;
+		}
+		if (measuring) {
+			pms7003->updateFrame();
 		}
 		if (pms7003->hasNewData()) {
   		measureValuePm01 = max(measureValuePm01, (int) pms7003->getPM_1_0());
@@ -78,9 +80,9 @@ public:
 					this->pm01->setInteger(measureValuePm01);
     			this->pm25->setInteger(measureValuePm25);
     			this->pm10->setInteger(measureValuePm10);
-    			this->aqi->setInteger(max(max(this->pm01->getInteger(), this->pm25->getInteger()), this->pm10->getInteger()));
+    			this->aqi->setInteger(max(max(measureValuePm01, measureValuePm25), measureValuePm10));
 					this->noOfSamples->setInteger(measureCounts);
-					this->lastUpdate->setString(clock->isValidTime() ? clock->getEpochTimeFormatted()->c_str() : "");					
+					this->lastUpdate->setString(clock->isValidTime() ? clock->getEpochTimeFormatted()->c_str() : "");
 				}
 			} else {
 				network->error(F("Timeout reading AQI sensor"));

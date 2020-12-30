@@ -4,9 +4,12 @@
 #include <FastLED.h>
 #include "WProperty.h"
 #include "WPin.h"
-#include "WMCP23017Expander.h"
 
+#ifdef ESP8266
 #define DATA_PIN D4
+#elif ESP32
+#define DATA_PIN 32
+#endif
 #define LED_PM 0
 #define LED_VOC 1
 #define LED_AUTO 2
@@ -36,7 +39,7 @@ struct WSLed {
 
 class WStatusLeds: public WPin {
 public:
-	WStatusLeds(WNetwork* network, WMCP23017Expander* expander, WProperty* aqi, WProperty* outsideAqi, bool insideOutsideAqiStatus,
+	WStatusLeds(WNetwork* network, WIOExpander* expander, WProperty* aqi, WProperty* outsideAqi, bool insideOutsideAqiStatus,
 		          WProperty* onOffProperty, WProperty* fanMode, WProperty* mode, WProperty* co2, WProperty* tvoc) :
 			WPin(DATA_PIN, OUTPUT) {
 		this->network = network;
@@ -58,6 +61,7 @@ public:
 		this->lastCycle = 0;
 		this->cycleFactor = 0;
 		this->blinkOn = false;
+		this->lastPulse = nullptr;
 		//initialize FastLED
 		FastLED.addLeds<WS2812, DATA_PIN, GRB>(fastLeds, NUM_LEDS);
 		FastLED.setBrightness(DEFAULT_BRIGHTNESS);
@@ -71,7 +75,7 @@ public:
 
 		if (insideOutsideAqiStatus) {
 			//Calculate cycle factor 0.. 1.0
-			if ((!this->aqi->isNull()) && (!this->outsideAqi->isNull())) {
+			if ((this->aqi != nullptr) && (!this->aqi->isNull()) && (this->outsideAqi != nullptr) && (!this->outsideAqi->isNull())) {
 				if (lastCycle == 0) {
 					lastCycle = now;
 				}
@@ -120,7 +124,7 @@ private:
 	bool touchPanelOn;
 	byte brightness;
 	WNetwork* network;
-	WMCP23017Expander* expander;
+	WIOExpander* expander;
 	WProperty* aqi;
 	WProperty* outsideAqi;
 	WProperty* onOffProperty;
@@ -131,6 +135,7 @@ private:
 	bool blinkOn, insideOutsideAqiStatus;
 	unsigned long lastBlinkOn, lastCycle;
 	float cycleFactor;
+	CRGB* lastPulse;
 
 	void updateLedStates() {
 		CRGB pmStatusColor = getPmStatusColor();
@@ -186,7 +191,7 @@ private:
 			//PM
 			leds[LED_PM].color = pmStatusColor;
 			leds[LED_PM].on = true;
-			leds[LED_PM].blinking = (this->aqi->isNull());
+			leds[LED_PM].blinking = ((this->aqi == nullptr) || (this->aqi->isNull()));
 		} else {
 			leds[LED_WIFI].on = false;
 			leds[LED_AUTO].on = false;
@@ -198,7 +203,7 @@ private:
 		if ((this->statusLedOn->getBoolean()) || (this->touchPanelOn)) {
 			leds[LED_STATUS].color = pmStatusColor;
 			leds[LED_STATUS].on = true;
-			leds[LED_STATUS].blinking = (this->aqi->isNull());
+			leds[LED_STATUS].blinking = ((this->aqi == nullptr) || (this->aqi->isNull()));
 		} else {
 			leds[LED_STATUS].on = false;
 		}
@@ -213,9 +218,13 @@ private:
   }
 
 	CRGB getPmStatusColor() {
-		if (!this->aqi->isNull()) {
+		if (lastPulse != nullptr) {
+			delete lastPulse;
+			lastPulse = nullptr;
+		}
+		if ((this->aqi != nullptr) && (!this->aqi->isNull())) {
       float aqi = this->aqi->getInteger();
-			if ((insideOutsideAqiStatus) && (!this->outsideAqi->isNull())) {
+			if ((insideOutsideAqiStatus) && (this->outsideAqi != nullptr) && (!this->outsideAqi->isNull())) {
 				aqi = aqi + ((float) (this->outsideAqi->getInteger() - aqi) * cycleFactor);
 			}
       byte r = 0;
@@ -240,7 +249,11 @@ private:
       } else if (aqi >= 110) {
         r = 128;
       }
-      return CRGB(r, g, b);
+
+
+			lastPulse = new CRGB(r, g, b);
+			return *lastPulse;
+
     } else {
       return CRGB::Red;
     }

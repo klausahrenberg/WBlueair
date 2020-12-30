@@ -2,8 +2,11 @@
 #define WTEMPERATURESENSOR_H_
 
 #include "Arduino.h"
+#ifdef ESP8266
 #include <ESP8266WiFi.h>
-#include <ArduinoJson.h>
+#elif ESP32
+#include <WiFi.h>
+#endif
 #include "WDevice.h"
 #include "HTU21D.h"
 
@@ -77,11 +80,11 @@ public:
 		return measureInterval;
 	}
 
-	void getMqttState(JsonObject& json) {
+	/*void getMqttState(JsonObject& json) {
 		json["temperature"] = getTemperature();
 		json["humidity"] = getHumidity();
 		//json["measureInterval"] = getMeasureInterval();
-	}
+	}*/
 
 	bool isDeviceStateComplete() {
 		return ((!this->temperature->isNull()) && (!this->humidity->isNull()));

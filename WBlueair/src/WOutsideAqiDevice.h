@@ -2,8 +2,13 @@
 #define	OUTSIDE_AQI_DEVICE_MCU_H
 
 #include "Arduino.h"
+#ifdef ESP8266
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
+#elif ESP32
+#include <WiFi.h>
+#include <HTTPClient.h>
+#endif
 #include <EEPROM.h>
 #include "WDevice.h"
 
@@ -15,6 +20,8 @@
 // idx as a 4 digit number.
 //const char* request = "http://api.waqi.info/feed/@4485/?token=3b67fe9c9b6d1ea7d885c5824af57e3a0aa2ae48";
 //const char *request = "http://api.waqi.info/feed/@1679/?token=3b67fe9c9b6d1ea7d885c5824af57e3a0aa2ae48";
+
+HTTPClient http;
 
 class WOutsideAqiDevice: public WDevice {
 public:
@@ -56,14 +63,14 @@ public:
 
   void loop(unsigned long now) {
     WDevice::loop(now);
-    if ((!this->apiToken->isNull())
-        && (!this->stationIndex->isNull())
+    if ((!this->apiToken->isNull()) && (!this->apiToken->equalsString(""))
+        && (!this->stationIndex->isNull()) && (!this->stationIndex->equalsString(""))
         && ((lastMeasure == 0) || (now - lastMeasure > measureInterval))
         && (WiFi.status() == WL_CONNECTED)) {
       WStringStream* request = new WStringStream(128);
       request->printAndReplace(F("http://api.waqi.info/feed/@%s/?token=%s"), this->stationIndex->c_str(), this->apiToken->c_str());
       network->notice(F("Outside AQI update via '%s'"), request->c_str());
-      HTTPClient http;
+
       http.begin(request->c_str());
       int httpCode = http.GET();
       if (httpCode > 0) {
@@ -87,19 +94,19 @@ public:
     }
   }
 
-  void printConfigPage(ESP8266WebServer* webServer, WStringStream* page) {
-    page->printAndReplace(FPSTR(HTTP_CONFIG_PAGE_BEGIN), getId());
-    page->printAndReplace(FPSTR(HTTP_CHECKBOX_OPTION), "sa", "sa", (showAsWebthingDevice->getBoolean() ? HTTP_CHECKED : ""), "", "Show as Mozilla Webthing device");
-    page->printAndReplace(FPSTR(HTTP_TEXT_FIELD), "Station Index:", "si", "8", stationIndex->c_str());
-    page->printAndReplace(FPSTR(HTTP_TEXT_FIELD), "waqi.info API token:", "at", "64", apiToken->c_str());
+  void printConfigPage(AsyncWebServerRequest* request, Print* page) {
+    page->printf(HTTP_CONFIG_PAGE_BEGIN, getId());
+    page->printf(HTTP_CHECKBOX_OPTION, "sa", "sa", (showAsWebthingDevice->getBoolean() ? HTTP_CHECKED : ""), "", "Show as Mozilla Webthing device");
+    page->printf(HTTP_TEXT_FIELD, "Station Index:", "si", "8", stationIndex->c_str());
+    page->printf(HTTP_TEXT_FIELD, "waqi.info API token:", "at", "64", apiToken->c_str());
     page->print(FPSTR(HTTP_CONFIG_SAVE_BUTTON));
 	}
 
-	void saveConfigPage(ESP8266WebServer* webServer, WStringStream* page) {
+	void saveConfigPage(AsyncWebServerRequest* request, Print* page) {
 		network->notice(F("Save config page"));
-		this->showAsWebthingDevice->setBoolean(webServer->arg("sa") == HTTP_TRUE);
-    this->stationIndex->setString(webServer->arg("si").c_str());
-    this->apiToken->setString(webServer->arg("at").c_str());
+		this->showAsWebthingDevice->setBoolean(request->arg("sa") == HTTP_TRUE);
+    this->stationIndex->setString(request->arg("si").c_str());
+    this->apiToken->setString(request->arg("at").c_str());
 	}
 
   WProperty* getAqi() {
