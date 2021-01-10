@@ -17,7 +17,6 @@ const int PIN_LED_HIGH = 0;
 const int PIN_SWITCH_WIFI = 4;
 const int PIN_SWITCH_FAN = 3;
 const int PIN_SWITCH_AUTO = 5;
-const int PIN_SWITCH_COVER = 6;
 
 class WIOExpander : public WI2C {
 public:
@@ -26,29 +25,30 @@ public:
 
   WIOExpander(byte i2cAddress) :
 			WI2C(i2cAddress, 21, 22, NO_PIN) {
-
+    this->coverOpen = false;
     statesA = 0b00000111;
     statesB = 0b00000000;
-
-
-
-    Wire.beginTransmission(i2cAddress);
+    changed = true;
+    Wire.beginTransmission(this->getAddress());
     // Select bandwidth rate register
     Wire.write(0x2C);
     // Normal mode, Output data rate = 100 Hz
     Wire.write(0x0A);
     Wire.endTransmission();
+    configureExpander();
+  }
+
+  void configureExpander() {
     // set entire PORT A to output
     Wire.beginTransmission(this->getAddress());
     Wire.write(0x00); // IODIRA register
-    Wire.write(0b01111000);
+    Wire.write(0b00111000);
     Wire.endTransmission();
     // set entire PORT B to output
     Wire.beginTransmission(this->getAddress());
     Wire.write(0x01); // IODIRB register
     Wire.write(0b00000000);
     Wire.endTransmission();
-
   }
 
   void loop(unsigned long now) {
@@ -60,7 +60,7 @@ public:
     inputA = Wire.read();
 
 
-    bool newB = bitRead(inputA, PIN_SWITCH_COVER);
+    /*bool newB = bitRead(inputA, PIN_SWITCH_COVER);
     if (newB != getBit(PIN_SWITCH_COVER)) {
       setBit(PIN_SWITCH_COVER, newB);
       if (!isCoverOpen()) {
@@ -69,10 +69,10 @@ public:
         setBit(PIN_SWITCH_AUTO, false);
       }
       notify(PIN_SWITCH_COVER, isCoverOpen());
-    }
+    }*/
     if (isCoverOpen()) {
       //WIFI
-      newB = bitRead(inputA, PIN_SWITCH_WIFI);
+      bool newB = bitRead(inputA, PIN_SWITCH_WIFI);
       if (newB != getBit(PIN_SWITCH_WIFI)) {
         setBit(PIN_SWITCH_WIFI, newB);
         if (newB) notify(PIN_SWITCH_WIFI, true);
@@ -89,18 +89,27 @@ public:
         setBit(PIN_SWITCH_AUTO, newB);
         if (newB) notify(PIN_SWITCH_AUTO, true);
       }
+    } else {
+      setBit(PIN_SWITCH_WIFI, false);
+      setBit(PIN_SWITCH_FAN, false);
+      setBit(PIN_SWITCH_AUTO, false);
     }
 
-    //Set states A
-    Wire.beginTransmission(this->getAddress());
-    Wire.write(0x12); // address port A
-    Wire.write(statesA);  // value to send
-    Wire.endTransmission();
-    //Set states B
-    Wire.beginTransmission(this->getAddress());
-    Wire.write(0x13); // address port B
-    Wire.write(statesB);  // value to send
-    Wire.endTransmission();
+    if (changed) {
+      Serial.println("Expander state changed. Write to expander");
+      configureExpander();
+      //Set states A
+      Wire.beginTransmission(this->getAddress());
+      Wire.write(0x12); // address port A
+      Wire.write(statesA);  // value to send
+      Wire.endTransmission();
+      //Set states B
+      Wire.beginTransmission(this->getAddress());
+      Wire.write(0x13); // address port B
+      Wire.write(statesB);  // value to send
+      Wire.endTransmission();
+      changed = false;
+    }
   }
 
   void setOnNotify(THandlerFunction fn) {
@@ -120,15 +129,23 @@ public:
   }
 
   void setBit(byte pinNo, bool value) {
-    if (pinNo < 8) {
-      bitWrite(statesA, pinNo, value);
-    } else {
-      bitWrite(statesB, pinNo - 8, value);
+    bool oldValue = getBit(pinNo);
+    if (oldValue != value) {
+      changed = true;
+      if (pinNo < 8) {
+        bitWrite(statesA, pinNo, value);
+      } else {
+        bitWrite(statesB, pinNo - 8, value);
+      }
     }
   }
 
   bool isCoverOpen() {
-    return getBit(PIN_SWITCH_COVER);
+    return coverOpen;
+  }
+
+  void setCoverOpen(bool coverOpen) {
+    this->coverOpen = coverOpen;
   }
 
 private:
@@ -136,6 +153,9 @@ private:
   byte statesA;
   byte inputA;
   byte statesB;
+  byte resetPin;
+  bool coverOpen;
+  bool changed;
 
   void notify(byte pin, bool isRising) {
     if (_callback) {

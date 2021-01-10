@@ -17,10 +17,12 @@
 #define PIN_PMS_SLEEP D5
 #elif ESP32
 #define PIN_PMS_SLEEP 33
+#define PIN_SWITCH_COVER 13
+#define PIN_EXPANDER_RESET 15
 #endif
-#define AQI_LIMIT_LOW 10
-#define AQI_LIMIT_MEDIUM 30
-#define AQI_LIMIT_HIGH 50
+#define AQI_LIMIT_LOW 15
+#define AQI_LIMIT_MEDIUM 40
+#define AQI_LIMIT_HIGH 100
 
 class WPurifierDevice: public WDevice {
 public:
@@ -48,6 +50,8 @@ public:
     }
     //IAQ Core
     Wire.begin();
+    //Initialize expander
+    resetExpander();
 
     this->iaqCore = new WIaqCore(this->network);
     this->addPin(this->iaqCore);
@@ -57,10 +61,14 @@ public:
     this->pms = new WPms7003(this->network, this->clock, PIN_PMS_SLEEP);
     this->addPin(this->pms);
 
+    //Pins
+    pinMode(PIN_SWITCH_COVER, INPUT);
+    pinMode(PIN_EXPANDER_RESET, OUTPUT);
     //IO expander
     this->expander = new WIOExpander(0x20);
     this->expander->setOnNotify(std::bind(&WPurifierDevice::onSwitchPressed, this, std::placeholders::_1, std::placeholders::_2));
     this->addPin(this->expander);
+
     //AQIs
     this->addProperty(this->pms->aqi);
     this->addProperty(this->pms->pm01);
@@ -75,7 +83,7 @@ public:
     //onOffProperty
     this->onOffProperty = WProperty::createOnOffProperty("on", "Switch");
     this->onOffProperty->setBoolean(true);
-    this->onOffProperty->setOnChange(std::bind(&WPurifierDevice::onFanModeChanged, this, std::placeholders::_1));
+    this->onOffProperty->setOnChange(std::bind(&WPurifierDevice::onOnOffChanged, this, std::placeholders::_1));
     this->addProperty(this->onOffProperty);
     //fan mode
     this->fanMode = new WProperty("fanMode", "Fan", STRING, TYPE_FAN_MODE_PROPERTY);
@@ -109,6 +117,13 @@ public:
     network->addCustomPage(configPage);
   }
 
+  void resetExpander() {
+    digitalWrite(PIN_EXPANDER_RESET, LOW);
+    delay(100);
+    digitalWrite(PIN_EXPANDER_RESET, HIGH);
+    delay(100);
+  }
+
 
   void loop(unsigned long now) {
     if ((this->mode->equalsString(MODE_AUTO)) && (!this->pms->aqi->isNull())) {
@@ -123,6 +138,26 @@ public:
         this->fanMode->setString(FAN_MODE_HIGH);
       }
     }
+    //PIN_SWITCH_FAN
+    bool newCoverState = (digitalRead(PIN_SWITCH_COVER) == HIGH);
+    if (newCoverState != expander->isCoverOpen()) {
+      network->debug("cover open: %d", newCoverState);
+      if (newCoverState) {
+        /*network->debug("expander reset...");
+        digitalWrite(PIN_EXPANDER_RESET, LOW);
+        delay(100);
+        digitalWrite(PIN_EXPANDER_RESET, HIGH);
+        delay(100);
+        expander->configureExpander();
+        delay(200);*/
+        digitalWrite(PIN_EXPANDER_RESET, HIGH);
+      } else {
+        digitalWrite(PIN_EXPANDER_RESET, HIGH);
+      }
+      expander->setCoverOpen(newCoverState);
+      leds->setTouchPanelOn(expander->isCoverOpen());
+    }
+
     WDevice::loop(now);
   }
 
@@ -153,6 +188,13 @@ public:
 
 protected:
 
+  void onOnOffChanged(WProperty* property) {
+    if ((this->onOffProperty) && (this->onOffProperty->getBoolean())) {
+      resetExpander();
+    }
+    onFanModeChanged(property);
+  }
+
   void onFanModeChanged(WProperty* property) {
     bool devOn = ((this->onOffProperty) && (this->onOffProperty->getBoolean()));
     expander->digitalWrite(PIN_Z, ((devOn) && (!this->fanMode->equalsString(FAN_MODE_OFF))));
@@ -162,7 +204,7 @@ protected:
   }
 
   void onSwitchPressed(byte switchNo, bool pressed) {
-    leds->setTouchPanelOn(expander->isCoverOpen());
+    network->notice(F("Switch %d pressed."), switchNo);
     switch (switchNo) {
       case PIN_SWITCH_COVER:
         //updateLeds();

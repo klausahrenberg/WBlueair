@@ -101,7 +101,7 @@
 -I/home/klausahrenberg/.platformio/packages/toolchain-xtensa32/lib/gcc/xtensa-esp32-elf/5.2.0/include-fixed
 -I/home/klausahrenberg/.platformio/packages/toolchain-xtensa32/xtensa-esp32-elf/include
 -I/home/klausahrenberg/.platformio/packages/tool-unity
--DPLATFORMIO=50003
+-DPLATFORMIO=50004
 -DARDUINO_ESP32_DEV
 -DCORE_DEBUG_LEVEL=0
 -DESP32
