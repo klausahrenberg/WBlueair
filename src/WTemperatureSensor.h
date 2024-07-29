@@ -18,19 +18,19 @@ class WTemperatureSensor: public WDevice {
 public:
 	WTemperatureSensor(WNetwork* network)
 		: WDevice(network, "temperature", "Temperature Sensor", DEVICE_TYPE_TEMPERATURE_SENSOR) {
-		this->mainDevice = false;
+		this->setMainDevice(false);
 		lastMeasure = 0;
 		measureValueTemperature = 0;
 		measureValueHumidity = 0;
 		measureCounts = 0;
 		measuring = false;
-		this->temperature = WProperty::createTemperatureProperty("temperature", "Actual");
-		this->temperature->setReadOnly(true);
+		this->temperature = WProps::createTemperatureProperty("temperature", "Actual");
+		this->temperature->readOnly(true);
 		this->addProperty(temperature);
-		this->humidity = new WLevelProperty("humidity", "Humidity", 0.0, 140.0);
-		this->humidity->setReadOnly(true);
-		this->humidity->setMultipleOf(0.1);
-		this->humidity->setUnit("%");
+		this->humidity = WProps::createLevelProperty("humidity", "Humidity", 0.0, 140.0);
+		this->humidity->readOnly(true);
+		this->humidity->multipleOf(0.1);
+		this->humidity->unit("%");
 		this->addProperty(humidity);
 		measureInterval = 60000;
 		dht = new HTU21D();
@@ -69,11 +69,11 @@ public:
 	}
 
 	double getTemperature() {
-		return temperature->getDouble();
+		return temperature->asDouble();
 	}
 
 	double getHumidity() {
-		return humidity->getDouble();
+		return humidity->asDouble();
 	}
 
 	int getMeasureInterval() {
@@ -102,8 +102,8 @@ private:
 
 	void setActualValues(double temperature, double humidity) {
 		if ((this->getTemperature() != temperature) || (this->getHumidity() != humidity)) {
-			this->temperature->setDouble(temperature);
-			this->humidity->setDouble(humidity);
+			this->temperature->asDouble(temperature);
+			this->humidity->asDouble(humidity);
 
 		}
 	}

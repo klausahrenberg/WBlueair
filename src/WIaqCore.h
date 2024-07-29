@@ -15,10 +15,10 @@ const char* LEVEL_MODERATE = "Moderate";
 const char* LEVEL_POOR = "Poor";
 const char* LEVEL_UNHEALTHY = "Unhealty";
 
-class WIaqCore: public WPin {
+class WIaqCore: public WInput {
 public:
   WIaqCore(WNetwork* network) :
-			WPin(NO_PIN, INPUT) {
+			WInput(NO_PIN, INPUT) {
     this->network = network;
     lastMeasure = 0;
 		measureValueCo2 = 0;
@@ -26,21 +26,21 @@ public:
 		measureCounts = 0;
 		measuring = false;
     measureInterval = 60000;
-    this->co2Value = WProperty::createUnsignedLongProperty("co2Value", "co2Value");
-    this->co2Value->setReadOnly(true);
-    this->co2Value->setVisibility(MQTT);
-    this->co2 = WProperty::createStringProperty("co2", "CO2", 9);
-    this->co2->setReadOnly(true);
+    this->co2Value = WProps::createUnsignedLongProperty("co2Value", "co2Value");
+    this->co2Value->readOnly(true);
+    this->co2Value->visibility(MQTT);
+    this->co2 = WProps::createStringProperty("co2", "CO2");
+    this->co2->readOnly(true);
     this->co2->addEnumString(LEVEL_EXCELLENT);
     this->co2->addEnumString(LEVEL_GOOD);
     this->co2->addEnumString(LEVEL_MODERATE);
     this->co2->addEnumString(LEVEL_POOR);
     this->co2->addEnumString(LEVEL_UNHEALTHY);
-    this->tvocValue = WProperty::createUnsignedLongProperty("tvocValue", "tvocValue");
-    this->tvocValue->setReadOnly(true);
-    this->tvocValue->setVisibility(MQTT);
-    this->tvoc = WProperty::createStringProperty("tvoc", "TVOC", 9);
-    this->tvoc->setReadOnly(true);
+    this->tvocValue = WProps::createUnsignedLongProperty("tvocValue", "tvocValue");
+    this->tvocValue->readOnly(true);
+    this->tvocValue->visibility(MQTT);
+    this->tvoc = WProps::createStringProperty("tvoc", "TVOC");
+    this->tvoc->readOnly(true);
     this->tvoc->addEnumString(LEVEL_EXCELLENT);
     this->tvoc->addEnumString(LEVEL_GOOD);
     this->tvoc->addEnumString(LEVEL_MODERATE);
@@ -64,8 +64,8 @@ public:
 				measureCounts++;
 				measuring = (measureCounts < AVERAGE_COUNTS);
 				if (!measuring) {
-          co2Value->setUnsignedLong((int) round((double) measureValueCo2 / (double) measureCounts));
-          tvocValue->setUnsignedLong((int) round((double) measureValueTvoc / (double) measureCounts));
+          co2Value->asUnsignedLong((int) round((double) measureValueCo2 / (double) measureCounts));
+          tvocValue->asUnsignedLong((int) round((double) measureValueTvoc / (double) measureCounts));
           updateCo2AndTvocRating();
 					measureValueCo2 = 0;
 					measureValueTvoc = 0;
@@ -98,18 +98,18 @@ private:
       //5 Unhealty 5,000 	Workplace exposure limit (as 8-hour TWA) in most jurisdictions.
       //6 >40,000 ppm 	Exposure may lead to serious oxygen deprivation resulting in permanent brain damage, coma, even death.
       if (co2Value->isUnsignedLongBetween(0, 400)) {
-        co2->setString(LEVEL_EXCELLENT);
+        co2->asString(LEVEL_EXCELLENT);
       } else if (co2Value->isUnsignedLongBetween(400, 1000)) {
-        co2->setString(LEVEL_GOOD);
+        co2->asString(LEVEL_GOOD);
       } else if (co2Value->isUnsignedLongBetween(1000, 2000)) {
-        co2->setString(LEVEL_MODERATE);
+        co2->asString(LEVEL_MODERATE);
       } else if (co2Value->isUnsignedLongBetween(2000, 5000)) {
-        co2->setString(LEVEL_POOR);
+        co2->asString(LEVEL_POOR);
       } else {
-        co2->setString(LEVEL_UNHEALTHY);
+        co2->asString(LEVEL_UNHEALTHY);
       }
     } else {
-      co2->setString("");
+      co2->asString("");
     }
     if (!tvocValue->isNull()) {
       //1 Excellent No objectionsTarget value no limit 0 – 65
@@ -118,18 +118,18 @@ private:
       //4 Poor Intensified ventilation necessary 660 – 2200
       //5 Unhealty Situation not acceptable 2200 – 5500
       if (tvocValue->isUnsignedLongBetween(0, 65)) {
-        tvoc->setString(LEVEL_EXCELLENT);
+        tvoc->asString(LEVEL_EXCELLENT);
       } else if (tvocValue->isUnsignedLongBetween(65, 220)) {
-        tvoc->setString(LEVEL_GOOD);
+        tvoc->asString(LEVEL_GOOD);
       } else if (tvocValue->isUnsignedLongBetween(220, 660)) {
-        tvoc->setString(LEVEL_MODERATE);
+        tvoc->asString(LEVEL_MODERATE);
       } else if (tvocValue->isUnsignedLongBetween(660, 2200)) {
-        tvoc->setString(LEVEL_POOR);
+        tvoc->asString(LEVEL_POOR);
       } else {
-        tvoc->setString(LEVEL_UNHEALTHY);
+        tvoc->asString(LEVEL_UNHEALTHY);
       }
     } else {
-      tvoc->setString("");
+      tvoc->asString("");
     }
   }
 

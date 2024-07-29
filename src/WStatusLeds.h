@@ -3,7 +3,7 @@
 
 #include <FastLED.h>
 #include "WProperty.h"
-#include "WPin.h"
+#include "WOutput.h"
 
 #ifdef ESP8266
 #define DATA_PIN D4
@@ -37,11 +37,11 @@ struct WSLed {
 	CRGB color;
 };
 
-class WStatusLeds: public WPin {
+class WStatusLeds: public WOutput {
 public:
 	WStatusLeds(WNetwork* network, WIOExpander* expander, WProperty* aqi, WProperty* outsideAqi, bool insideOutsideAqiStatus,
 		          WProperty* onOffProperty, WProperty* fanMode, WProperty* mode, WProperty* co2, WProperty* tvoc) :
-			WPin(DATA_PIN, OUTPUT) {
+			WOutput(DATA_PIN) {
 		this->network = network;
 		this->expander = expander;
 		this->aqi = aqi;
@@ -54,9 +54,9 @@ public:
 		this->tvoc = tvoc;
 		this->brightness = 160;
 		this->touchPanelOn = false;
-		this->statusLedOn = WProperty::createBooleanProperty("statusLedOn", "Status LED");
-		this->statusLedOn->setBoolean(true);
-		this->network->getSettings()->add(this->statusLedOn);
+		this->statusLedOn = WProps::createBooleanProperty("statusLedOn", "Status LED");
+		this->statusLedOn->asBool(true);
+		this->network->settings()->add(this->statusLedOn);
 		this->lastBlinkOn = 0;
 		this->lastCycle = 0;
 		this->cycleFactor = 0;
@@ -163,13 +163,13 @@ private:
     	} else {
 				leds[LED_AUTO].color = DEFAULT_COLOR;
     	}
-			leds[LED_AUTO].blinking = (onOffProperty && !onOffProperty->getBoolean());
+			leds[LED_AUTO].blinking = (onOffProperty && !onOffProperty->asBool());
 			leds[LED_AUTO].on = true;
     	//Filter
 			leds[LED_FILTER].color = DEFAULT_COLOR;
 			leds[LED_FILTER].on = true;
     	//VOC
-			byte level = max(co2->getEnumIndex(), tvoc->getEnumIndex());
+			byte level = max(co2->enumIndex(), tvoc->enumIndex());
 			if (level != 0xFF) {
 				switch (level) {
 					case 0:
@@ -200,7 +200,7 @@ private:
 			leds[LED_PM].on = false;
 		}
 		//External Status LED
-		if ((this->statusLedOn->getBoolean()) || (this->touchPanelOn)) {
+		if ((this->statusLedOn->asBool()) || (this->touchPanelOn)) {
 			leds[LED_STATUS].color = pmStatusColor;
 			leds[LED_STATUS].on = true;
 			leds[LED_STATUS].blinking = ((this->aqi == nullptr) || (this->aqi->isNull()));
@@ -210,7 +210,7 @@ private:
 		//Fan Bar LEDs
 		bool b = (this->touchPanelOn) && (!this->fanMode->equalsString(FAN_MODE_OFF));
 		barLeds[0].on = b;
-		barLeds[0].blinking = (onOffProperty && !onOffProperty->getBoolean());
+		barLeds[0].blinking = (onOffProperty && !onOffProperty->asBool());
 		barLeds[1].on = (b && ((this->fanMode->equalsString(FAN_MODE_MEDIUM)) || (this->fanMode->equalsString(FAN_MODE_HIGH))));
 		barLeds[1].blinking = barLeds[0].blinking;
 		barLeds[2].on = (b && (this->fanMode->equalsString(FAN_MODE_HIGH)));
@@ -223,9 +223,9 @@ private:
 			lastPulse = nullptr;
 		}
 		if ((this->aqi != nullptr) && (!this->aqi->isNull())) {
-      float aqi = this->aqi->getInteger();
+      float aqi = this->aqi->asInt();
 			if ((insideOutsideAqiStatus) && (this->outsideAqi != nullptr) && (!this->outsideAqi->isNull())) {
-				aqi = aqi + ((float) (this->outsideAqi->getInteger() - aqi) * cycleFactor);
+				aqi = aqi + ((float) (this->outsideAqi->asInt() - aqi) * cycleFactor);
 			}
       byte r = 0;
       byte g = 0;

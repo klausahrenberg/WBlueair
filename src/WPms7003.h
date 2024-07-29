@@ -1,7 +1,7 @@
 #ifndef W_PMS_7003_H
 #define W_PMS_7003_H
 
-#include "WPin.h"
+#include "WOutput.h"
 #include "WClock.h"
 #include "Plantower_PMS7003.h"
 
@@ -12,10 +12,10 @@
 #define CORRECTION_PM_25 0.0
 #define CORRECTION_PM_10 0.0
 
-class WPms7003: public WPin {
+class WPms7003: public WOutput {
 public:
 	WPms7003(WNetwork* network, WClock* clock, int sleepPin) :
-			WPin(sleepPin, OUTPUT) {
+			WOutput(sleepPin) {
     this->network = network;
 		this->clock = clock;
     this->lastMeasure = 0;
@@ -30,30 +30,30 @@ public:
 		this->pms7003 = new Plantower_PMS7003();
     this->pms7003->init(&Serial);
 		this->failStatusSent = false;
-    this->aqi = new WLevelIntProperty("aqi", "AQI", 0, 200);
-    this->aqi->setReadOnly(true);
-    this->pm01 = new WLevelIntProperty("pm01", "PM 1.0", 0, 200);
-    this->pm01->setReadOnly(true);
-		this->pm01->setVisibility(MQTT);
-    this->pm25 = new WLevelIntProperty("pm25", "PM 2.5", 0, 200);
-    this->pm25->setReadOnly(true);
-		this->pm25->setVisibility(MQTT);
-    this->pm10 = new WLevelIntProperty("pm10", "PM 10", 0, 200);
-    this->pm10->setReadOnly(true);
-		this->pm10->setVisibility(MQTT);
-		this->noOfSamples = WProperty::createIntegerProperty("noOfSamples", "noOfSamples");
-		this->noOfSamples->setReadOnly(true);
-		this->noOfSamples->setVisibility(MQTT);
-		this->lastUpdate = WProperty::createStringProperty("lastUpdate", "lastUpdate", 19);
-		this->lastUpdate->setReadOnly(true);
-		this->lastUpdate->setVisibility(MQTT);
+    _aqi = WProps::createLevelIntProperty("aqi", "AQI", 0, 200);
+    _aqi->readOnly(true);
+    _pm01 = WProps::createLevelIntProperty("pm01", "PM 1.0", 0, 200);
+    _pm01->readOnly(true);
+		_pm01->visibility(MQTT);
+    _pm25 = WProps::createLevelIntProperty("pm25", "PM 2.5", 0, 200);
+    _pm25->readOnly(true);
+		_pm25->visibility(MQTT);
+    _pm10 = WProps::createLevelIntProperty("pm10", "PM 10", 0, 200);
+    _pm10->readOnly(true);
+		_pm10->visibility(MQTT);
+		_noOfSamples = WProps::createIntegerProperty("noOfSamples", "noOfSamples");
+		_noOfSamples->readOnly(true);
+		_noOfSamples->visibility(MQTT);
+		_lastUpdate = WProps::createStringProperty("lastUpdate", "lastUpdate");
+		_lastUpdate->readOnly(true);
+		_lastUpdate->visibility(MQTT);
   }
 
   void loop(unsigned long now) {
 		if ((!measuring) && ((lastMeasure == 0) || (now - lastMeasure > measureInterval))) {
 			network->notice(F("Start measuring..."));
     	lastMeasure = now;
-			digitalWrite(this->getPin(), HIGH);
+			digitalWrite(this->pin(), HIGH);
 			pms7003->requestRead();
 			lastSign = now;
 			measuring = true;
@@ -77,12 +77,12 @@ public:
 			lastMeasure = now;
 			if (measureCounts > 0) {
 				if (measureCounts >= MEASUREMENTS_MIN) {
-					this->pm01->setInteger(measureValuePm01);
-    			this->pm25->setInteger(measureValuePm25);
-    			this->pm10->setInteger(measureValuePm10);
-    			this->aqi->setInteger(max(max(measureValuePm01, measureValuePm25), measureValuePm10));
-					this->noOfSamples->setInteger(measureCounts);
-					this->lastUpdate->setString(clock->isValidTime() ? clock->getEpochTimeFormatted()->c_str() : "");
+					_pm01->asInt(measureValuePm01);
+    			_pm25->asInt(measureValuePm25);
+    			_pm10->asInt(measureValuePm10);
+    			_aqi->asInt(max(max(measureValuePm01, measureValuePm25), measureValuePm10));
+					_noOfSamples->asInt(measureCounts);
+					_lastUpdate->asString(clock->isValidTime() ? clock->epochTimeFormatted()->c_str() : "");
 				}
 			} else {
 				network->error(F("Timeout reading AQI sensor"));
@@ -92,16 +92,16 @@ public:
     	measureValuePm10 = 0;
 			measureCounts = 0;
 	  	measuring = false;
-			digitalWrite(this->getPin(), LOW);
+			digitalWrite(this->pin(), LOW);
 		}
   }
 
-  WProperty* aqi;
-  WProperty* pm01;
-  WProperty* pm25;
-  WProperty* pm10;
-	WProperty* noOfSamples;
-	WProperty* lastUpdate;
+  WProperty* aqi() { return _aqi; }
+	WProperty* pm01() { return _pm01; }
+	WProperty* pm25() { return _pm25; }
+	WProperty* pm10() { return _pm10; }
+	WProperty* noOfSamples() { return _noOfSamples; }
+	WProperty* lastUpdate() { return _lastUpdate; }
 protected:
 
 private:
@@ -113,6 +113,12 @@ private:
   bool measuring, updateNotify;
   int measureCounts;
   int measureValuePm01, measureValuePm25, measureValuePm10;
+	WProperty* _aqi;
+  WProperty* _pm01;
+  WProperty* _pm25;
+  WProperty* _pm10;
+	WProperty* _noOfSamples;
+	WProperty* _lastUpdate;
 };
 
 #endif

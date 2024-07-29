@@ -22,14 +22,13 @@ class WIOExpander : public WI2C {
 public:
   typedef std::function<void(byte pin, bool isRising)> THandlerFunction;
 
-
   WIOExpander(byte i2cAddress) :
 			WI2C(i2cAddress, 21, 22, NO_PIN) {
     this->coverOpen = false;
     statesA = 0b00000111;
     statesB = 0b00000000;
     changed = true;
-    Wire.beginTransmission(this->getAddress());
+    Wire.beginTransmission(this->address());
     // Select bandwidth rate register
     Wire.write(0x2C);
     // Normal mode, Output data rate = 100 Hz
@@ -40,12 +39,12 @@ public:
 
   void configureExpander() {
     // set entire PORT A to output
-    Wire.beginTransmission(this->getAddress());
+    Wire.beginTransmission(this->address());
     Wire.write(0x00); // IODIRA register
     Wire.write(0b00111000);
     Wire.endTransmission();
     // set entire PORT B to output
-    Wire.beginTransmission(this->getAddress());
+    Wire.beginTransmission(this->address());
     Wire.write(0x01); // IODIRB register
     Wire.write(0b00000000);
     Wire.endTransmission();
@@ -53,10 +52,10 @@ public:
 
   void loop(unsigned long now) {
     //Read inputs
-    Wire.beginTransmission(this->getAddress());
+    Wire.beginTransmission(this->address());
     Wire.write(0x12); // address port A
     Wire.endTransmission();
-    Wire.requestFrom(this->getAddress(), 1);
+    Wire.requestFrom(this->address(), 1);
     inputA = Wire.read();
 
 
@@ -99,12 +98,12 @@ public:
       Serial.println("Expander state changed. Write to expander");
       configureExpander();
       //Set states A
-      Wire.beginTransmission(this->getAddress());
+      Wire.beginTransmission(this->address());
       Wire.write(0x12); // address port A
       Wire.write(statesA);  // value to send
       Wire.endTransmission();
       //Set states B
-      Wire.beginTransmission(this->getAddress());
+      Wire.beginTransmission(this->address());
       Wire.write(0x13); // address port B
       Wire.write(statesB);  // value to send
       Wire.endTransmission();
